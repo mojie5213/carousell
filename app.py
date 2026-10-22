@@ -6,15 +6,19 @@ import streamlit as st
 
 # 页面配置
 st.set_page_config(page_title="Carousell 账号检测工具", page_icon="🔍", layout="centered")
-# 隐藏右上角的 GitHub 图标和 Fork 按钮的 CSS 样式
+
+# CSS 样式：隐藏默认菜单/页脚、保留手机端头部折叠按钮、隐藏右下角官方浮动图标
 hide_streamlit_style = """
 <style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-header {visibility: hidden;}
+header {visibility: visible !important;}
+.stDeployButton {display:none;}
+div[data-testid="stStatusWidget"] {visibility: hidden;}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 st.title("🔍 Carousell 账号存活状态批量检测工具（智能代理版）")
 st.markdown("支持自动补全代理协议头，实现代理有效性测速、IP 归属地显示与分类统计。")
 
@@ -36,7 +40,6 @@ def format_proxy(proxy_str):
     if not proxy_str:
         return None
     proxy_str = proxy_str.strip()
-    # 如果用户没有写协议头，默认自动补全为最高效的 socks5h://
     if not proxy_str.startswith("http://") and not proxy_str.startswith("https://") and not proxy_str.startswith("socks"):
         return f"socks5h://{proxy_str}"
     return proxy_str
@@ -206,7 +209,7 @@ if st.button("🚀 开始批量检测", type="primary"):
                            
         st.download_button(
             label="📥 下载分类检测结果文件",
-            data=result_text if 'result_text' in locals() else all_results_text,
+            data=all_results_text,
             file_name="carousell_categorized_results.txt",
             mime="text/plain"
         )
