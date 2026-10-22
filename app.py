@@ -7,7 +7,7 @@ import streamlit as st
 # 页面配置
 st.set_page_config(page_title="小老弟账号检测工具", page_icon="🔍", layout="centered")
 
-st.title("🔍 Carousell 账号存活状态批量检测工具（智能代理版）")
+st.title("🔍 小老弟 账号存活状态批量检测工具（智能代理版）")
 st.markdown("支持自动补全代理协议头，实现代理有效性测速、IP 归属地显示与分类统计。")
 
 # 侧边栏配置参数
