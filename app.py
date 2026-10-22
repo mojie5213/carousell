@@ -5,21 +5,9 @@ from bs4 import BeautifulSoup
 import streamlit as st
 
 # 页面配置
-st.set_page_config(page_title="小老弟旋转账号检测工具", page_icon="🔍", layout="centered")
+st.set_page_config(page_title="小老弟账号检测工具", page_icon="🔍", layout="centered")
 
-# CSS 样式：隐藏右下角官方徽标
-hide_streamlit_style = """
-<style>
-.stDeployButton {display: none !important;}
-footer {visibility: hidden !important; display: none !important;}
-.viewerBadge_container__1QSob {display: none !important;}
-div[class*="viewerBadge"] {display: none !important; visibility: hidden !important;}
-#stDecoration {display: none !important;}
-</style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-st.title("🔍 老弟旋转账号存活状态批量检测工具（智能代理版）")
+st.title("🔍 Carousell 账号存活状态批量检测工具（智能代理版）")
 st.markdown("支持自动补全代理协议头，实现代理有效性测速、IP 归属地显示与分类统计。")
 
 # 侧边栏配置参数
@@ -40,6 +28,7 @@ def format_proxy(proxy_str):
     if not proxy_str:
         return None
     proxy_str = proxy_str.strip()
+    # 如果用户没有写协议头，默认自动补全为最高效的 socks5h://
     if not proxy_str.startswith("http://") and not proxy_str.startswith("https://") and not proxy_str.startswith("socks"):
         return f"socks5h://{proxy_str}"
     return proxy_str
@@ -101,7 +90,7 @@ else:
         content = uploaded_file.getvalue().decode("utf-8")
         usernames = [line.strip() for line in content.split("\n") if line.strip()]
 
-# 核心检测逻辑（使用 Session 保持连接并应用自动格式化代理）
+# 核心检测逻辑（已完美适配手机验证状态与加入时间兄弟节点解析）
 def check_user_meta(username, proxy_url):
     url = f"https://www.carousell.com.hk/u/{username}/"
     headers = {
@@ -125,19 +114,40 @@ def check_user_meta(username, proxy_url):
         response = session.get(url, headers=headers, timeout=12, allow_redirects=True)
         
         if response.status_code == 404:
-            return "BANNED_OR_NOT_EXIST", "账号不存在 (404)"
+            return "BANNED_OR_NOT_EXIST", "账号不存在 (404)", "未知", "未知"
             
         soup = BeautifulSoup(response.text, 'html.parser')
         og_url = soup.find('meta', property='og:url')
         if og_url and 'content' in og_url.attrs:
             content_url = og_url['content'].lower()
             if username.lower() in content_url:
-                return "ACTIVE", "正常存活"
+                # 1. 手机验证状态解析优化：无“未验证”字样即默认为已验证
+                page_text = soup.get_text()
+                if any(k in page_text for k in ["未验证", "未驗證", "Unverified"]):
+                    verification_status = "未验证"
+                else:
+                    verification_status = "已验证"
+
+                # 2. 加入时间解析：兼容前后节点结构
+                joined_time = "未知"
+                joined_element = soup.find(string=lambda t: t and ("已加入" in t or "Joined" in t))
+                if joined_element and joined_element.parent:
+                    parent = joined_element.parent
+                    full_text = parent.get_text(strip=True)
+                    val = full_text.replace("已加入", "").replace("Joined", "").strip()
+                    if val:
+                        joined_time = val
+                    else:
+                        prev_sibling = parent.find_previous_sibling()
+                        if prev_sibling:
+                            joined_time = prev_sibling.get_text(strip=True)
+
+                return "ACTIVE", "正常存活", verification_status, joined_time
                 
-        return "BANNED_OR_NOT_EXIST", "账号不存在或已被封禁"
+        return "BANNED_OR_NOT_EXIST", "账号不存在或已被封禁", "未知", "未知"
         
     except Exception as e:
-        return "ERROR", f"请求异常或代理中断: {e}"
+        return "ERROR", f"请求异常或代理中断: {e}", "未知", "未知"
 
 # 开始检测按钮
 if st.button("🚀 开始批量检测", type="primary"):
@@ -161,12 +171,20 @@ if st.button("🚀 开始批量检测", type="primary"):
         for i, username in enumerate(usernames):
             status_text.text(f"正在检测 [{i+1}/{len(usernames)}]: {username} ...")
             
-            status, desc = check_user_meta(username, raw_proxy_input)
+            status, desc, verification, joined = check_user_meta(username, raw_proxy_input)
             
             if status == "ACTIVE":
-                success_list.append({"用户名": username, "状态": desc})
+                success_list.append({
+                    "用户名": username, 
+                    "状态": desc, 
+                    "手机验证": verification, 
+                    "加入时间": joined
+                })
             else:
-                fail_list.append({"用户名": username, "状态": desc})
+                fail_list.append({
+                    "用户名": username, 
+                    "状态": desc
+                })
             
             progress_bar.progress((i + 1) / len(usernames))
             
@@ -189,7 +207,7 @@ if st.button("🚀 开始批量检测", type="primary"):
         with tab1:
             if success_list:
                 for item in success_list:
-                    st.success(f"**{item['用户名']}** -> {item['状态']}")
+                    st.success(f"**{item['用户名']}** -> {item['状态']}  |  📱 手机: `{item['手机验证']}`  |  ⏳ 加入时间: `{item['加入时间']}`")
             else:
                 st.info("没有检测到存活的账号。")
                 
@@ -203,14 +221,13 @@ if st.button("🚀 开始批量检测", type="primary"):
         # 下载按钮
         st.markdown("---")
         all_results_text = "=== 成功存活账号 ===\n" + \
-                           "\n".join([f"{i['用户名']} -> {i['状态']}" for i in success_list]) + \
-                           "\n\n=== 失败/异常账号 ===\n" + \
-                           "\n".join([f"{i['用户名']} -> {i['状态']}" for i in fail_list])
-                           
+                            "\n".join([f"{i['用户名']} -> {i['状态']} | 手机: {i['手机验证']} | 加入时间: {i['加入时间']}" for i in success_list]) + \
+                            "\n\n=== 失败/异常账号 ===\n" + \
+                            "\n".join([f"{i['用户名']} -> {i['状态']}" for i in fail_list])
+                            
         st.download_button(
             label="📥 下载分类检测结果文件",
             data=all_results_text,
             file_name="carousell_categorized_results.txt",
             mime="text/plain"
         )
-# test
