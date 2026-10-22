@@ -7,27 +7,27 @@ import streamlit as st
 # 页面配置
 st.set_page_config(page_title="Carousell 账号检测工具", page_icon="🔍", layout="centered")
 
-# CSS 样式：隐藏默认菜单/页脚、保留手机端头部折叠按钮、隐藏右下角官方浮动图标
-# 终极隐藏 Streamlit 默认的 Fork、GitHub 图标以及右下角悬浮徽标
+# CSS 样式：完美隐藏顶栏、右下角官方徽标、Manage app 按钮，同时保留手机端侧边栏折叠按钮
 hide_streamlit_style = """
 <style>
-/* 隐藏顶部默认菜单、页脚及顶栏工具 */
+/* 隐藏顶部默认菜单、页脚 */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: visible !important;}
 
 /* 精准隐藏右上角的 GitHub 和 Fork 按钮 */
 [data-testid="stToolbar"] {display: none !important;}
-.stAppHeader {background-color: transparent !important;}
 
-/* 隐藏右下角的 Streamlit 官方浮动徽标和状态弹窗 */
+/* 彻底隐藏右下角的 Streamlit 官方浮动徽标、状态弹窗以及 "Manage app" 管理按钮 */
 .stDeployButton {display: none !important;}
 div[data-testid="stStatusWidget"] {visibility: hidden !important;}
 section[data-testid="stStatusWidget"] {display: none !important;}
 #stDecoration {display: none !important;}
+iframe[title="streamlitAppManage"] {display: none !important;}
+button[kind="manage"] {display: none !important;}
+.viewerBadge_container__1QSob {display: none !important;}
 </style>
 """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.title("🔍 Carousell 账号存活状态批量检测工具（智能代理版）")
