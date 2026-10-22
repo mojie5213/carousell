@@ -1,8 +1,0 @@
-[theme]
-base = "light"
-
-[client]
-showErrorDetails = true
-
-[ui]
-hideTopBar = true
