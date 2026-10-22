@@ -5,7 +5,19 @@ from bs4 import BeautifulSoup
 import streamlit as st
 
 # 页面配置
-st.set_page_config(page_title="Carousell 账号检测工具", page_icon="🔍", layout="centered")
+st.set_page_config(page_title="小老弟旋转账号检测工具", page_icon="🔍", layout="centered")
+
+# CSS 样式：隐藏右下角官方徽标
+hide_streamlit_style = """
+<style>
+.stDeployButton {display: none !important;}
+footer {visibility: hidden !important; display: none !important;}
+.viewerBadge_container__1QSob {display: none !important;}
+div[class*="viewerBadge"] {display: none !important; visibility: hidden !important;}
+#stDecoration {display: none !important;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.title("🔍 Carousell 账号存活状态批量检测工具（智能代理版）")
 st.markdown("支持自动补全代理协议头，实现代理有效性测速、IP 归属地显示与分类统计。")
