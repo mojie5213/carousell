@@ -19,7 +19,7 @@ div[class*="viewerBadge"] {display: none !important; visibility: hidden !importa
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-st.title("🔍 Carousell 账号存活状态批量检测工具（智能代理版）")
+st.title("🔍 老弟旋转账号存活状态批量检测工具（智能代理版）")
 st.markdown("支持自动补全代理协议头，实现代理有效性测速、IP 归属地显示与分类统计。")
 
 # 侧边栏配置参数
