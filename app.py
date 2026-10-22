@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import streamlit as st
 
 # 页面配置
-st.set_page_config(page_title="Carousell 账号检测工具", page_icon="🔍", layout="centered")
+st.set_page_config(page_title="小老弟Carousell 账号检测工具", page_icon="🔍", layout="centered")
 
 # CSS 样式：完美隐藏顶栏、右下角官方徽标、Manage app 按钮，同时保留手机端侧边栏折叠按钮
 hide_streamlit_style = """
