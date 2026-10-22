@@ -6,7 +6,15 @@ import streamlit as st
 
 # 页面配置
 st.set_page_config(page_title="Carousell 账号检测工具", page_icon="🔍", layout="centered")
-
+# 隐藏右上角的 GitHub 图标和 Fork 按钮的 CSS 样式
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 st.title("🔍 Carousell 账号存活状态批量检测工具（智能代理版）")
 st.markdown("支持自动补全代理协议头，实现代理有效性测速、IP 归属地显示与分类统计。")
 
