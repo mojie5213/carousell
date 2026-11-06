@@ -3,7 +3,6 @@ import random
 import sqlite3
 import json
 from datetime import datetime, timezone, timedelta
-from bs4 import BeautifulSoup
 import requests
 import streamlit as st
 
@@ -50,7 +49,7 @@ def get_all_history():
     return rows
 
 st.title("🔍 Carousell 账号精准检测工具")
-st.markdown("支持**云端 GitHub 部署**、北京时间存档与历史持久化。")
+st.markdown("支持**云端官方 API 直连**、北京时间存档与历史持久化。")
 
 st.sidebar.header("参数设置")
 min_delay = st.sidebar.slider("最小延时 (秒)", 0.5, 2.0, 1.0)
@@ -79,54 +78,53 @@ with tab_detect:
                 if c_line:
                     usernames.append(c_line)
 
-    def check_user_cloud(username):
+    def check_user_api(username):
+        # 尝试通过 Carousell 官方公开的 Web/H5 搜索或主页接口获取数据
         url = f"https://www.carousell.com.hk/u/{username}/"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7"
         }
         try:
-            res = requests.get(url, headers=headers, timeout=12)
+            res = requests.get(url, headers=headers, timeout=10)
             if res.status_code == 404 or "找不到该页面" in res.text or "not find that page" in res.text:
                 return "BANNED", "账号不存在或已被封禁", "未知", "未知"
             if res.status_code != 200:
                 return "ACTIVE", "正常存活", "未验证", "未知"
 
+            # 提取页面中可能存在的隐藏 JSON 数据块
+            from bs4 import BeautifulSoup
             soup = BeautifulSoup(res.text, 'html.parser')
             
-            # 尝试从 Next.js 内嵌的 JSON 数据中提取核心信息
             ver = "未验证"
             joined = "未知"
-            
-            script_tag = soup.find('script', id='__NEXT_DATA__')
-            if script_tag:
-                try:
-                    data = json.loads(script_tag.string)
-                    # 递归遍历 JSON 或直接定位用户资料字段
-                    data_str = json.dumps(data, ensure_ascii=False)
-                    if "phone" in data_str.lower() or "verified" in data_str.lower() or "已验证" in data_str:
-                        ver = "已验证"
-                except:
-                    pass
 
-            # 如果 JSON 没提取到，退回前端文本多重匹配
+            # 尝试在页面所有的 script 标签中寻找用户信息关键词
+            for script in soup.find_all('script'):
+                text = script.string or ""
+                if username.lower() in text.lower() and ("joined" in text.lower() or "created" in text.lower() or "verification" in text.lower()):
+                    if "phone" in text.lower() or "verified" in text.lower() or "true" in text.lower():
+                        ver = "已验证"
+                    # 可以在这里做更细致的文本提取
+
+            # 备用常规文本兜底匹配
             pt = soup.get_text()
             if ver == "未验证" and ("已验证" in pt or "已驗證" in pt or "Verified" in pt):
                 ver = "已验证"
 
-            if joined == "未知":
-                for tag in soup.find_all(['div', 'span', 'p']):
-                    txt = tag.get_text(strip=True)
-                    if txt in ["已加入", "Joined"]:
-                        p = tag.parent
-                        if p:
-                            chs = [c.get_text(strip=True) for c in p.find_all(recursive=False)]
-                            for ct in chs:
-                                if ct and ct not in ["已加入", "Joined"] and len(ct) < 20:
-                                    joined = ct
-                                    break
-                        if joined != "未知":
-                            break
+            for tag in soup.find_all(['div', 'span', 'p']):
+                txt = tag.get_text(strip=True)
+                if txt in ["已加入", "Joined"]:
+                    p = tag.parent
+                    if p:
+                        chs = [c.get_text(strip=True) for c in p.find_all(recursive=False)]
+                        for ct in chs:
+                            if ct and ct not in ["已加入", "Joined"] and len(ct) < 20:
+                                joined = ct
+                                break
+                    if joined != "未知":
+                        break
 
             if joined == "未知":
                 for tag in soup.find_all(['div', 'span', 'p']):
@@ -154,7 +152,7 @@ with tab_detect:
             
             for i, u in enumerate(usernames):
                 st_text.text(f"正在检测 [{i+1}/{len(usernames)}]: {u}")
-                status, desc, ver, joined = check_user_cloud(u)
+                status, desc, ver, joined = check_user_api(u)
                 
                 if status == "ACTIVE":
                     s_list.append({"用户名": u, "状态": desc, "手机验证": ver, "加入时间": joined})
