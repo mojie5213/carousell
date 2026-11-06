@@ -2,13 +2,19 @@ import time
 import random
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import requests
 from bs4 import BeautifulSoup
 import streamlit as st
 
 # 页面配置
-st.set_page_config(page_title="小老弟账号检测工具", page_icon="🔍", layout="centered")
+st.set_page_config(page_title="小老弟 账号检测工具", page_icon="🔍", layout="centered")
+
+# 获取北京时间（UTC+8）
+def get_beijing_time():
+    utc_now = datetime.now(timezone.utc)
+    beijing_now = utc_now + timedelta(hours=8)
+    return beijing_now.strftime("%Y-%m-%d %H:%M:%S")
 
 # --- 数据库初始化（本地历史持久化） ---
 def init_db():
@@ -29,11 +35,11 @@ def init_db():
 
 init_db()
 
-# 保存批次历史到数据库
+# 保存批次历史到数据库（使用北京时间）
 def save_batch_history(total, success, fail, success_list, fail_list):
     conn = sqlite3.connect("carousell_history.db", check_same_thread=False)
     c = conn.cursor()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = get_beijing_time()
     payload = {
         "success_list": success_list,
         "fail_list": fail_list
@@ -53,7 +59,7 @@ def get_all_history():
     return rows
 
 st.title("🔍 小老弟 账号存活状态批量检测工具")
-st.markdown("支持**延时控制**、手机验证状态、加入时间自动抓取与本地历史记录永久持久化。")
+st.markdown("支持**北京时间存档**、延时控制、手机验证状态、加入时间自动抓取与本地历史记录持久化。")
 
 # 侧边栏配置参数（保留延时滑块）
 st.sidebar.header("⚙️ 参数设置")
@@ -165,7 +171,7 @@ with tab_detect:
                 if i < len(usernames) - 1:
                     time.sleep(random.uniform(min_delay, max_delay))
                     
-            status_text.text("🎉 所有账号检测完毕，已自动写入历史数据库！")
+            status_text.text("🎉 所有账号检测完毕，已自动按北京时间写入历史数据库！")
             
             # 自动保存到本地数据库
             save_batch_history(len(usernames), len(success_list), len(fail_list), success_list, fail_list)
@@ -210,48 +216,7 @@ with tab_detect:
             )
 
 with tab_history:
-    st.subheader("📜 历史检测记录（本地持久化存档）")
-    st.markdown("这里保存了你历次检测的所有详细报告。关闭页面或重新打开均不会丢失。")
+    st.subheader("📜 历史检测记录（北京时间存档）")
+    st.markdown("这里保存了你历次检测的所有详细报告。时间已自动校准为北京时间（UTC+8）。")
     
     rows = get_all_history()
-    
-    if not rows:
-        st.info("📭 暂无历史检测记录。请先在左侧的“批量检测工具”标签页中运行一次检测。")
-    else:
-        for row in rows:
-            hid, timestamp, total, success, fail, data_json = row
-            with st.expander(f"🕒 检测时间: {timestamp}  |  总数: {total}  |  ✅ 存活: {success}  |  ❌ 异常: {fail}"):
-                try:
-                    data = json.loads(data_json)
-                    s_list = data.get("success_list", [])
-                    f_list = data.get("fail_list", [])
-                    
-                    st.markdown("**✅ 成功存活账号列表:**")
-                    if s_list:
-                        for item in s_list:
-                            st.text(f" • {item['用户名']} -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
-                    else:
-                        st.text("无")
-                        
-                    st.markdown("**❌ 失败/异常账号列表:**")
-                    if f_list:
-                        for item in f_list:
-                            st.text(f" • {item['用户名']} -> {item['状态']}")
-                    else:
-                        st.text("无")
-                        
-                    # 每一条历史记录单独支持重新下载
-                    single_text = f"=== 历史检测报告 (时间: {timestamp}) ===\n" + \
-                                  "\n".join([f"{i['用户名']} -> {i['状态']} | 手机: {i['手机验证']} | 加入时间: {i['加入时间']}" for i in s_list]) + \
-                                  "\n\n=== 失败/异常账号 ===\n" + \
-                                  "\n".join([f"{i['用户名']} -> {i['状态']}" for i in f_list])
-                                  
-                    st.download_button(
-                        label=f"📥 重新下载该批次报告 ({timestamp})",
-                        data=single_text,
-                        file_name=f"carousell_history_{timestamp.replace(':', '_').replace(' ', '_')}.txt",
-                        mime="text/plain",
-                        key=f"download_history_{hid}"
-                    )
-                except Exception as e:
-                    st.error(f"解析该条历史记录出错: {e}")
