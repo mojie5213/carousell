@@ -3,6 +3,7 @@ import random
 import sqlite3
 import json
 from datetime import datetime, timezone, timedelta
+from bs4 import BeautifulSoup
 import requests
 import streamlit as st
 
@@ -49,7 +50,7 @@ def get_all_history():
     return rows
 
 st.title("🔍 Carousell 账号精准检测工具")
-st.markdown("支持**云端官方 API 直连**、北京时间存档与历史持久化。")
+st.markdown("支持**云端 GitHub 部署**、北京时间存档与历史持久化。")
 
 st.sidebar.header("参数设置")
 min_delay = st.sidebar.slider("最小延时 (秒)", 0.5, 2.0, 1.0)
@@ -78,49 +79,37 @@ with tab_detect:
                 if c_line:
                     usernames.append(c_line)
 
-    def check_user_api(username):
-        # 尝试通过 Carousell 官方公开的 Web/H5 搜索或主页接口获取数据
+    def check_user_cloud(username):
         url = f"https://www.carousell.com.hk/u/{username}/"
         headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7"
         }
         try:
-            res = requests.get(url, headers=headers, timeout=10)
+            res = requests.get(url, headers=headers, timeout=12)
             if res.status_code == 404 or "找不到该页面" in res.text or "not find that page" in res.text:
                 return "BANNED", "账号不存在或已被封禁", "未知", "未知"
             if res.status_code != 200:
                 return "ACTIVE", "正常存活", "未验证", "未知"
 
-            # 提取页面中可能存在的隐藏 JSON 数据块
-            from bs4 import BeautifulSoup
             soup = BeautifulSoup(res.text, 'html.parser')
-            
-            ver = "未验证"
-            joined = "未知"
-
-            # 尝试在页面所有的 script 标签中寻找用户信息关键词
-            for script in soup.find_all('script'):
-                text = script.string or ""
-                if username.lower() in text.lower() and ("joined" in text.lower() or "created" in text.lower() or "verification" in text.lower()):
-                    if "phone" in text.lower() or "verified" in text.lower() or "true" in text.lower():
-                        ver = "已验证"
-                    # 可以在这里做更细致的文本提取
-
-            # 备用常规文本兜底匹配
             pt = soup.get_text()
-            if ver == "未验证" and ("已验证" in pt or "已驗證" in pt or "Verified" in pt):
+
+            # 手机验证检测
+            ver = "未验证"
+            if "已验证" in pt or "已驗證" in pt or "Verified" in pt or "已认证" in pt:
                 ver = "已验证"
 
+            # 增强型加入时间扫描
+            joined = "未知"
             for tag in soup.find_all(['div', 'span', 'p']):
                 txt = tag.get_text(strip=True)
-                if txt in ["已加入", "Joined"]:
+                if txt in ["已加入", "Joined", "加入于"]:
                     p = tag.parent
                     if p:
                         chs = [c.get_text(strip=True) for c in p.find_all(recursive=False)]
                         for ct in chs:
-                            if ct and ct not in ["已加入", "Joined"] and len(ct) < 20:
+                            if ct and ct not in ["已加入", "Joined", "加入于"] and len(ct) < 20:
                                 joined = ct
                                 break
                     if joined != "未知":
@@ -130,7 +119,7 @@ with tab_detect:
                 for tag in soup.find_all(['div', 'span', 'p']):
                     ts = tag.get_text(strip=True)
                     tl = ts.lower()
-                    if ("yesterday" in tl or "ago" in tl or "天前" in ts or "个月前" in ts or "年前" in ts) and len(ts) < 15:
+                    if ("yesterday" in tl or "ago" in tl or "天前" in ts or "个月前" in ts or "年前" in ts or "小时前" in ts) and len(ts) < 15:
                         if "评价" not in ts and "粉丝" not in ts and "商品" not in ts:
                             joined = ts
                             break
@@ -152,7 +141,7 @@ with tab_detect:
             
             for i, u in enumerate(usernames):
                 st_text.text(f"正在检测 [{i+1}/{len(usernames)}]: {u}")
-                status, desc, ver, joined = check_user_api(u)
+                status, desc, ver, joined = check_user_cloud(u)
                 
                 if status == "ACTIVE":
                     s_list.append({"用户名": u, "状态": desc, "手机验证": ver, "加入时间": joined})
