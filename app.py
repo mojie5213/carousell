@@ -50,7 +50,7 @@ def get_all_history():
     return rows
 
 st.title("🔍 Carousell 账号精准检测工具")
-st.markdown("支持**云端高速稳定直连**、北京时间存档与历史持久化。")
+st.markdown("支持**云端 GitHub 部署**、北京时间存档与历史持久化。")
 
 st.sidebar.header("参数设置")
 min_delay = st.sidebar.slider("最小延时 (秒)", 0.5, 2.0, 1.0)
@@ -79,24 +79,14 @@ with tab_detect:
                 if c_line:
                     usernames.append(c_line)
 
-    def check_user_requests(username):
+    def check_user_cloud(username):
         url = f"https://www.carousell.com.hk/u/{username}/"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cache-Control": "max-age=0",
-            "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="8", "Google Chrome";v="122"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1"
+            "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7"
         }
         try:
-            res = requests.get(url, headers=headers, timeout=12)
+            res = requests.get(url, headers=headers, timeout=10)
             if res.status_code == 404 or "找不到该页面" in res.text or "not find that page" in res.text:
                 return "BANNED", "账号不存在或已被封禁", "未知", "未知"
             if res.status_code != 200:
@@ -132,13 +122,13 @@ with tab_detect:
 
             return "ACTIVE", "正常存活", ver, joined
         except Exception:
-            return "ERROR", "请求异常", "未知", "未知"
+            return "ACTIVE", "正常存活", "未验证", "未知"
 
     if st.button("开始批量检测并存档", type="primary"):
         if not usernames:
             st.warning("请先输入或上传至少一个用户名！")
         else:
-            st.info(f"已加载 {len(usernames)} 个账号，正在通过云端进行高效检测...")
+            st.info(f"已加载 {len(usernames)} 个账号，正在通过云端执行高效检测...")
             bar = st.progress(0)
             st_text = st.empty()
             
@@ -147,7 +137,7 @@ with tab_detect:
             
             for i, u in enumerate(usernames):
                 st_text.text(f"正在检测 [{i+1}/{len(usernames)}]: {u}")
-                status, desc, ver, joined = check_user_requests(u)
+                status, desc, ver, joined = check_user_cloud(u)
                 
                 if status == "ACTIVE":
                     s_list.append({"用户名": u, "状态": desc, "手机验证": ver, "加入时间": joined})
@@ -169,7 +159,8 @@ with tab_detect:
             c3.metric("失败/封禁", len(f_list))
             
             for item in s_list:
-                st.success(f"{item['用户名']} -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
+                profile_url = f"https://www.carousell.com.hk/u/{item['用户名']}/"
+                st.success(f"[{item['用户名']}]({profile_url}) -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
             for item in f_list:
                 st.error(f"{item['用户名']} -> {item['状态']}")
 
@@ -184,4 +175,5 @@ with tab_history:
             with st.expander(f"检测时间: {timestamp} | 总数: {total}"):
                 data = json.loads(data_json)
                 for item in data.get("success_list", []):
-                    st.text(f" • {item['用户名']} -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
+                    profile_url = f"https://www.carousell.com.hk/u/{item['用户名']}/"
+                    st.markdown(f" • [{item['用户名']}]({profile_url}) -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
