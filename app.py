@@ -35,7 +35,7 @@ def init_db():
 
 init_db()
 
-# 保存批次历史到数据库（使用北京时间）
+# 保存批次历史到数据库
 def save_batch_history(total, success, fail, success_list, fail_list):
     conn = sqlite3.connect("carousell_history.db", check_same_thread=False)
     c = conn.cursor()
@@ -61,7 +61,7 @@ def get_all_history():
 st.title("🔍 小老弟 账号存活状态批量检测工具")
 st.markdown("支持**北京时间存档**、延时控制、手机验证状态、加入时间自动抓取与本地历史记录持久化。")
 
-# 侧边栏配置参数（保留延时滑块）
+# 侧边栏配置参数
 st.sidebar.header("⚙️ 参数设置")
 min_delay = st.sidebar.slider("最小延时 (秒)", 1.0, 3.0, 1.5)
 max_delay = st.sidebar.slider("最大延时 (秒)", 2.5, 5.0, 3.0)
@@ -76,7 +76,7 @@ with tab_detect:
 
     usernames = []
     if input_method == "文本框输入":
-        raw_text = st.text_area("请输入用户名（每行一个）", placeholder="my410871\nroya33c101\n145b3f")
+        raw_text = st.text_area("请输入用户名（每行一个）", placeholder="freesa2b3\nbra0bc9c\nmoon.f5402e")
         if raw_text:
             usernames = [line.strip() for line in raw_text.split("\n") if line.strip()]
     else:
@@ -85,12 +85,15 @@ with tab_detect:
             content = uploaded_file.getvalue().decode("utf-8")
             usernames = [line.strip() for line in content.split("\n") if line.strip()]
 
-    # 核心检测逻辑（直连无代理）
+    # 核心检测逻辑（已优化请求头，防反爬拦截）
     def check_user_meta(username):
         url = f"https://www.carousell.com.hk/u/{username}/"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept-Language": "zh-HK,zh;q=0.9,en;q=0.8",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://www.carousell.com.hk/",
+            "Connection": "keep-alive"
         }
         
         session = requests.Session()
@@ -101,36 +104,39 @@ with tab_detect:
             if response.status_code == 404:
                 return "BANNED_OR_NOT_EXIST", "账号不存在 (404)", "未知", "未知"
                 
+            # 如果状态码不是 200，说明被拦截或异常
+            if response.status_code != 200:
+                return "BANNED_OR_NOT_EXIST", f"账号不存在或已被封禁 (状态码: {response.status_code})", "未知", "未知"
+                
             soup = BeautifulSoup(response.text, 'html.parser')
-            og_url = soup.find('meta', property='og:url')
-            if og_url and 'content' in og_url.attrs:
-                content_url = og_url['content'].lower()
-                if username.lower() in content_url:
-                    # 1. 手机验证状态解析
-                    page_text = soup.get_text()
-                    if any(k in page_text for k in ["未验证", "未驗證", "Unverified"]):
-                        verification_status = "未验证"
-                    else:
-                        verification_status = "已验证"
-
-                    # 2. 加入时间解析
-                    joined_time = "未知"
-                    joined_element = soup.find(string=lambda t: t and ("已加入" in t or "Joined" in t))
-                    if joined_element and joined_element.parent:
-                        parent = joined_element.parent
-                        full_text = parent.get_text(strip=True)
-                        val = full_text.replace("已加入", "").replace("Joined", "").strip()
-                        if val:
-                            joined_time = val
-                        else:
-                            prev_sibling = parent.find_previous_sibling()
-                            if prev_sibling:
-                                joined_time = prev_sibling.get_text(strip=True)
-
-                    return "ACTIVE", "正常存活", verification_status, joined_time
-                    
-            return "BANNED_OR_NOT_EXIST", "账号不存在或已被封禁", "未知", "未知"
             
+            # 检查页面是否包含明确的封禁或不存在提示
+            page_text = soup.get_text()
+            if "很抱歉，找不到该页面" in page_text or "Sorry, we couldn't find that page" in page_text:
+                return "BANNED_OR_NOT_EXIST", "账号不存在或已被封禁", "未知", "未知"
+
+            # 1. 手机验证状态解析
+            if any(k in page_text for k in ["未验证", "未驗證", "Unverified"]):
+                verification_status = "未验证"
+            else:
+                verification_status = "已验证"
+
+            # 2. 加入时间解析
+            joined_time = "未知"
+            joined_element = soup.find(string=lambda t: t and ("已加入" in t or "Joined" in t))
+            if joined_element and joined_element.parent:
+                parent = joined_element.parent
+                full_text = parent.get_text(strip=True)
+                val = full_text.replace("已加入", "").replace("Joined", "").strip()
+                if val:
+                    joined_time = val
+                else:
+                    prev_sibling = parent.find_previous_sibling()
+                    if prev_sibling:
+                        joined_time = prev_sibling.get_text(strip=True)
+
+            return "ACTIVE", "正常存活", verification_status, joined_time
+                
         except Exception as e:
             return "ERROR", f"请求异常: {e}", "未知", "未知"
 
@@ -220,3 +226,44 @@ with tab_history:
     st.markdown("这里保存了你历次检测的所有详细报告。时间已自动校准为北京时间（UTC+8）。")
     
     rows = get_all_history()
+    
+    if not rows:
+        st.info("📭 暂无历史检测记录。请先在左侧的“批量检测工具”标签页中运行一次检测。")
+    else:
+        for row in rows:
+            hid, timestamp, total, success, fail, data_json = row
+            with st.expander(f"🕒 检测时间 (北京时间): {timestamp}  |  总数: {total}  |  ✅ 存活: {success}  |  ❌ 异常: {fail}"):
+                try:
+                    data = json.loads(data_json)
+                    s_list = data.get("success_list", [])
+                    f_list = data.get("fail_list", [])
+                    
+                    st.markdown("**✅ 成功存活账号列表:**")
+                    if s_list:
+                        for item in s_list:
+                            st.text(f" • {item['用户名']} -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
+                    else:
+                        st.text("无")
+                        
+                    st.markdown("**❌ 失败/异常账号列表:**")
+                    if f_list:
+                        for item in f_list:
+                            st.text(f" • {item['用户名']} -> {item['状态']}")
+                    else:
+                        st.text("无")
+                        
+                    # 每一条历史记录单独支持重新下载
+                    single_text = f"=== 历史检测报告 (北京时间: {timestamp}) ===\n" + \
+                                  "\n".join([f"{i['用户名']} -> {i['状态']} | 手机: {i['手机验证']} | 加入时间: {i['加入时间']}" for i in s_list]) + \
+                                  "\n\n=== 失败/异常账号 ===\n" + \
+                                  "\n".join([f"{i['用户名']} -> {i['状态']}" for i in f_list])
+                                  
+                    st.download_button(
+                        label=f"📥 重新下载该批次报告 ({timestamp})",
+                        data=single_text,
+                        file_name=f"carousell_history_{timestamp.replace(':', '_').replace(' ', '_')}.txt",
+                        mime="text/plain",
+                        key=f"download_history_{hid}"
+                    )
+                except Exception as e:
+                    st.error(f"解析该条历史记录出错: {e}")
