@@ -2,6 +2,7 @@ import time
 import random
 import sqlite3
 import json
+import re
 from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
 import requests
@@ -83,7 +84,8 @@ with tab_detect:
         url = f"https://www.carousell.com.hk/u/{username}/"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+            "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://www.carousell.com.hk/"
         }
         try:
             res = requests.get(url, headers=headers, timeout=12)
@@ -93,35 +95,39 @@ with tab_detect:
                 return "ACTIVE", "正常存活", "未验证", "未知"
 
             soup = BeautifulSoup(res.text, 'html.parser')
-            pt = soup.get_text()
+            page_text = soup.get_text()
 
-            # 手机验证检测
+            # 1. 手机验证精准正则识别
             ver = "未验证"
-            if "已验证" in pt or "已驗證" in pt or "Verified" in pt or "已认证" in pt:
+            if re.search(r'(已验证|已驗證|Verified|已认证|Phone verified)', page_text, re.I):
                 ver = "已验证"
 
-            # 增强型加入时间扫描
+            # 2. 全局正则强力匹配加入时间（支持 "Joined X days ago", "加入于...", "2d", "yesterday", "X天前" 等）
             joined = "未知"
-            for tag in soup.find_all(['div', 'span', 'p']):
-                txt = tag.get_text(strip=True)
-                if txt in ["已加入", "Joined", "加入于"]:
-                    p = tag.parent
-                    if p:
-                        chs = [c.get_text(strip=True) for c in p.find_all(recursive=False)]
-                        for ct in chs:
-                            if ct and ct not in ["已加入", "Joined", "加入于"] and len(ct) < 20:
-                                joined = ct
-                                break
-                    if joined != "未知":
+            
+            # 尝试匹配常见的几种时间格式
+            time_patterns = [
+                r'(?:加入于|Joined|已加入)[:\s]*([^\n<]{2,15})',
+                r'(\d+[\s]*(?:天|日|周|个月|年|day|days|week|weeks|month|months|year|years)[\s]*前)',
+                r'(yesterday|today|\d+\s*d|\d+\s*w|\d+\s*m|\d+\s*y)'
+            ]
+            
+            for pattern in time_patterns:
+                match = re.search(pattern, page_text, re.I)
+                if match:
+                    val = match.group(1).strip()
+                    if val and len(val) < 15 and "评价" not in val and "粉丝" not in val:
+                        joined = val
                         break
 
+            # 3. 兜底标签遍历
             if joined == "未知":
-                for tag in soup.find_all(['div', 'span', 'p']):
-                    ts = tag.get_text(strip=True)
-                    tl = ts.lower()
-                    if ("yesterday" in tl or "ago" in tl or "天前" in ts or "个月前" in ts or "年前" in ts or "小时前" in ts) and len(ts) < 15:
-                        if "评价" not in ts and "粉丝" not in ts and "商品" not in ts:
-                            joined = ts
+                for tag in soup.find_all(['div', 'span', 'p', 'time']):
+                    txt = tag.get_text(strip=True)
+                    tl = txt.lower()
+                    if any(kw in tl for kw in ["ago", "yesterday", "天前", "个月前", "年前", "小时前", "joined"]):
+                        if len(txt) < 15 and "评价" not in txt and "粉丝" not in txt:
+                            joined = txt
                             break
 
             return "ACTIVE", "正常存活", ver, joined
