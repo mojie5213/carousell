@@ -2,7 +2,6 @@ import time
 import random
 import sqlite3
 import json
-import re
 from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
 import requests
@@ -84,55 +83,17 @@ with tab_detect:
         url = f"https://www.carousell.com.hk/u/{username}/"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://www.carousell.com.hk/"
+            "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7"
         }
         try:
-            res = requests.get(url, headers=headers, timeout=12)
+            res = requests.get(url, headers=headers, timeout=10)
             if res.status_code == 404 or "找不到该页面" in res.text or "not find that page" in res.text:
-                return "BANNED", "账号不存在或已被封禁", "未知", "未知"
-            if res.status_code != 200:
-                return "ACTIVE", "正常存活", "未验证", "未知"
-
-            soup = BeautifulSoup(res.text, 'html.parser')
-            page_text = soup.get_text()
-
-            # 1. 手机验证精准正则识别
-            ver = "未验证"
-            if re.search(r'(已验证|已驗證|Verified|已认证|Phone verified)', page_text, re.I):
-                ver = "已验证"
-
-            # 2. 全局正则强力匹配加入时间（支持 "Joined X days ago", "加入于...", "2d", "yesterday", "X天前" 等）
-            joined = "未知"
-            
-            # 尝试匹配常见的几种时间格式
-            time_patterns = [
-                r'(?:加入于|Joined|已加入)[:\s]*([^\n<]{2,15})',
-                r'(\d+[\s]*(?:天|日|周|个月|年|day|days|week|weeks|month|months|year|years)[\s]*前)',
-                r'(yesterday|today|\d+\s*d|\d+\s*w|\d+\s*m|\d+\s*y)'
-            ]
-            
-            for pattern in time_patterns:
-                match = re.search(pattern, page_text, re.I)
-                if match:
-                    val = match.group(1).strip()
-                    if val and len(val) < 15 and "评价" not in val and "粉丝" not in val:
-                        joined = val
-                        break
-
-            # 3. 兜底标签遍历
-            if joined == "未知":
-                for tag in soup.find_all(['div', 'span', 'p', 'time']):
-                    txt = tag.get_text(strip=True)
-                    tl = txt.lower()
-                    if any(kw in tl for kw in ["ago", "yesterday", "天前", "个月前", "年前", "小时前", "joined"]):
-                        if len(txt) < 15 and "评价" not in txt and "粉丝" not in txt:
-                            joined = txt
-                            break
-
-            return "ACTIVE", "正常存活", ver, joined
+                return "BANNED", "账号不存在或已被封禁"
+            if res.status_code == 200:
+                return "ACTIVE", "正常存活"
+            return "ACTIVE", "正常存活"
         except Exception:
-            return "ACTIVE", "正常存活", "未验证", "未知"
+            return "ACTIVE", "正常存活"
 
     if st.button("开始批量检测并存档", type="primary"):
         if not usernames:
@@ -147,10 +108,10 @@ with tab_detect:
             
             for i, u in enumerate(usernames):
                 st_text.text(f"正在检测 [{i+1}/{len(usernames)}]: {u}")
-                status, desc, ver, joined = check_user_cloud(u)
+                status, desc = check_user_cloud(u)
                 
                 if status == "ACTIVE":
-                    s_list.append({"用户名": u, "状态": desc, "手机验证": ver, "加入时间": joined})
+                    s_list.append({"用户名": u, "状态": desc})
                 else:
                     f_list.append({"用户名": u, "状态": desc})
                 
@@ -170,7 +131,7 @@ with tab_detect:
             
             for item in s_list:
                 profile_url = f"https://www.carousell.com.hk/u/{item['用户名']}/"
-                st.markdown(f"✔ **[{item['用户名']}]({profile_url})** -> 正常存活 | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
+                st.markdown(f"✔ **[{item['用户名']}]({profile_url})** -> 正常存活（点击用户名可直达主页查看详细信息）")
             for item in f_list:
                 st.error(f"{item['用户名']} -> {item['状态']}")
 
@@ -186,4 +147,4 @@ with tab_history:
                 data = json.loads(data_json)
                 for item in data.get("success_list", []):
                     profile_url = f"https://www.carousell.com.hk/u/{item['用户名']}/"
-                    st.markdown(f" • **[{item['用户名']}]({profile_url})** -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
+                    st.markdown(f" • **[{item['用户名']}]({profile_url})** -> {item['状态']}")
