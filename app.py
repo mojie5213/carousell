@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import streamlit as st
 
 # 页面配置
-st.set_page_config(page_title="小老弟 账号检测工具", page_icon="🔍", layout="centered")
+st.set_page_config(page_title="Carousell 账号检测工具", page_icon="🔍", layout="centered")
 
 # 获取北京时间（UTC+8）
 def get_beijing_time():
@@ -58,7 +58,7 @@ def get_all_history():
     conn.close()
     return rows
 
-st.title("🔍 小老弟 账号存活状态批量检测工具")
+st.title("🔍 Carousell 账号存活状态批量检测工具")
 st.markdown("支持**北京时间存档**、延时控制、手机验证状态、加入时间自动抓取与本地历史记录持久化。")
 
 # 侧边栏配置参数
@@ -85,32 +85,48 @@ with tab_detect:
             content = uploaded_file.getvalue().decode("utf-8")
             usernames = [line.strip() for line in content.split("\n") if line.strip()]
 
-    # 核心检测逻辑（已优化请求头，防反爬拦截）
+    # 核心检测逻辑（升级版请求头，完美防 403 拦截）
     def check_user_meta(username):
         url = f"https://www.carousell.com.hk/u/{username}/"
+        
+        # 模拟真实 Chrome 浏览器的完整指纹标头
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
             "Referer": "https://www.carousell.com.hk/",
+            "Sec-Ch-Ua": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
             "Connection": "keep-alive"
         }
         
         session = requests.Session()
             
         try:
+            # 先访问一次首页获取合法的 Cookie 会话
+            session.get("https://www.carousell.com.hk/", headers=headers, timeout=10)
+            
+            # 稍作微小停顿模拟真实浏览
+            time.sleep(random.uniform(0.5, 1.0))
+            
+            # 再请求用户主页
             response = session.get(url, headers=headers, timeout=12, allow_redirects=True)
             
             if response.status_code == 404:
                 return "BANNED_OR_NOT_EXIST", "账号不存在 (404)", "未知", "未知"
                 
-            # 如果状态码不是 200，说明被拦截或异常
             if response.status_code != 200:
                 return "BANNED_OR_NOT_EXIST", f"账号不存在或已被封禁 (状态码: {response.status_code})", "未知", "未知"
                 
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 检查页面是否包含明确的封禁或不存在提示
             page_text = soup.get_text()
             if "很抱歉，找不到该页面" in page_text or "Sorry, we couldn't find that page" in page_text:
                 return "BANNED_OR_NOT_EXIST", "账号不存在或已被封禁", "未知", "未知"
@@ -234,36 +250,4 @@ with tab_history:
             hid, timestamp, total, success, fail, data_json = row
             with st.expander(f"🕒 检测时间 (北京时间): {timestamp}  |  总数: {total}  |  ✅ 存活: {success}  |  ❌ 异常: {fail}"):
                 try:
-                    data = json.loads(data_json)
-                    s_list = data.get("success_list", [])
-                    f_list = data.get("fail_list", [])
-                    
-                    st.markdown("**✅ 成功存活账号列表:**")
-                    if s_list:
-                        for item in s_list:
-                            st.text(f" • {item['用户名']} -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
-                    else:
-                        st.text("无")
-                        
-                    st.markdown("**❌ 失败/异常账号列表:**")
-                    if f_list:
-                        for item in f_list:
-                            st.text(f" • {item['用户名']} -> {item['状态']}")
-                    else:
-                        st.text("无")
-                        
-                    # 每一条历史记录单独支持重新下载
-                    single_text = f"=== 历史检测报告 (北京时间: {timestamp}) ===\n" + \
-                                  "\n".join([f"{i['用户名']} -> {i['状态']} | 手机: {i['手机验证']} | 加入时间: {i['加入时间']}" for i in s_list]) + \
-                                  "\n\n=== 失败/异常账号 ===\n" + \
-                                  "\n".join([f"{i['用户名']} -> {i['状态']}" for i in f_list])
-                                  
-                    st.download_button(
-                        label=f"📥 重新下载该批次报告 ({timestamp})",
-                        data=single_text,
-                        file_name=f"carousell_history_{timestamp.replace(':', '_').replace(' ', '_')}.txt",
-                        mime="text/plain",
-                        key=f"download_history_{hid}"
-                    )
-                except Exception as e:
-                    st.error(f"解析该条历史记录出错: {e}")
+                    data = json
