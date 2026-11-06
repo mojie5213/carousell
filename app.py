@@ -85,11 +85,10 @@ with tab_detect:
             content = uploaded_file.getvalue().decode("utf-8")
             usernames = [line.strip() for line in content.split("\n") if line.strip()]
 
-    # 核心检测逻辑（升级版请求头，完美防 403 拦截）
+    # 核心检测逻辑（升级版请求头，防 403 拦截）
     def check_user_meta(username):
         url = f"https://www.carousell.com.hk/u/{username}/"
         
-        # 模拟真实 Chrome 浏览器的完整指纹标头
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -110,13 +109,10 @@ with tab_detect:
         session = requests.Session()
             
         try:
-            # 先访问一次首页获取合法的 Cookie 会话
+            # 访问首页带上 Cookie
             session.get("https://www.carousell.com.hk/", headers=headers, timeout=10)
-            
-            # 稍作微小停顿模拟真实浏览
             time.sleep(random.uniform(0.5, 1.0))
             
-            # 再请求用户主页
             response = session.get(url, headers=headers, timeout=12, allow_redirects=True)
             
             if response.status_code == 404:
@@ -189,13 +185,11 @@ with tab_detect:
                 
                 progress_bar.progress((i + 1) / len(usernames))
                 
-                # 应用延时策略
                 if i < len(usernames) - 1:
                     time.sleep(random.uniform(min_delay, max_delay))
                     
             status_text.text("🎉 所有账号检测完毕，已自动按北京时间写入历史数据库！")
             
-            # 自动保存到本地数据库
             save_batch_history(len(usernames), len(success_list), len(fail_list), success_list, fail_list)
             
             # --- 数据展示区 ---
@@ -250,4 +244,35 @@ with tab_history:
             hid, timestamp, total, success, fail, data_json = row
             with st.expander(f"🕒 检测时间 (北京时间): {timestamp}  |  总数: {total}  |  ✅ 存活: {success}  |  ❌ 异常: {fail}"):
                 try:
-                    data = json
+                    data = json.loads(data_json)
+                    s_list = data.get("success_list", [])
+                    f_list = data.get("fail_list", [])
+                    
+                    st.markdown("**✅ 成功存活账号列表:**")
+                    if s_list:
+                        for item in s_list:
+                            st.text(f" • {item['用户名']} -> {item['状态']} | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
+                    else:
+                        st.text("无")
+                        
+                    st.markdown("**❌ 失败/异常账号列表:**")
+                    if f_list:
+                        for item in f_list:
+                            st.text(f" • {item['用户名']} -> {item['状态']}")
+                    else:
+                        st.text("无")
+                        
+                    single_text = f"=== 历史检测报告 (北京时间: {timestamp}) ===\n" + \
+                                  "\n".join([f"{i['用户名']} -> {i['状态']} | 手机: {i['手机验证']} | 加入时间: {i['加入时间']}" for i in s_list]) + \
+                                  "\n\n=== 失败/异常账号 ===\n" + \
+                                  "\n".join([f"{i['用户名']} -> {i['状态']}" for i in f_list])
+                                  
+                    st.download_button(
+                        label=f"📥 重新下载该批次报告 ({timestamp})",
+                        data=single_text,
+                        file_name=f"carousell_history_{timestamp.replace(':', '_').replace(' ', '_')}.txt",
+                        mime="text/plain",
+                        key=f"download_history_{hid}"
+                    )
+                except Exception as e:
+                    st.error(f"解析该条历史记录出错: {e}")
