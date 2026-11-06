@@ -86,33 +86,47 @@ with tab_detect:
             "Accept-Language": "zh-HK,zh;q=0.9,en-US;q=0.8,en;q=0.7"
         }
         try:
-            res = requests.get(url, headers=headers, timeout=10)
+            res = requests.get(url, headers=headers, timeout=12)
             if res.status_code == 404 or "找不到该页面" in res.text or "not find that page" in res.text:
                 return "BANNED", "账号不存在或已被封禁", "未知", "未知"
             if res.status_code != 200:
                 return "ACTIVE", "正常存活", "未验证", "未知"
 
             soup = BeautifulSoup(res.text, 'html.parser')
-            pt = soup.get_text()
-
-            if "已验证" in pt or "已驗證" in pt or "Verified" in pt:
-                ver = "已验证"
-            else:
-                ver = "未验证"
-
+            
+            # 尝试从 Next.js 内嵌的 JSON 数据中提取核心信息
+            ver = "未验证"
             joined = "未知"
-            for tag in soup.find_all(['div', 'span', 'p']):
-                txt = tag.get_text(strip=True)
-                if txt in ["已加入", "Joined"]:
-                    p = tag.parent
-                    if p:
-                        chs = [c.get_text(strip=True) for c in p.find_all(recursive=False)]
-                        for ct in chs:
-                            if ct and ct not in ["已加入", "Joined"] and len(ct) < 20:
-                                joined = ct
-                                break
-                    if joined != "未知":
-                        break
+            
+            script_tag = soup.find('script', id='__NEXT_DATA__')
+            if script_tag:
+                try:
+                    data = json.loads(script_tag.string)
+                    # 递归遍历 JSON 或直接定位用户资料字段
+                    data_str = json.dumps(data, ensure_ascii=False)
+                    if "phone" in data_str.lower() or "verified" in data_str.lower() or "已验证" in data_str:
+                        ver = "已验证"
+                except:
+                    pass
+
+            # 如果 JSON 没提取到，退回前端文本多重匹配
+            pt = soup.get_text()
+            if ver == "未验证" and ("已验证" in pt or "已驗證" in pt or "Verified" in pt):
+                ver = "已验证"
+
+            if joined == "未知":
+                for tag in soup.find_all(['div', 'span', 'p']):
+                    txt = tag.get_text(strip=True)
+                    if txt in ["已加入", "Joined"]:
+                        p = tag.parent
+                        if p:
+                            chs = [c.get_text(strip=True) for c in p.find_all(recursive=False)]
+                            for ct in chs:
+                                if ct and ct not in ["已加入", "Joined"] and len(ct) < 20:
+                                    joined = ct
+                                    break
+                        if joined != "未知":
+                            break
 
             if joined == "未知":
                 for tag in soup.find_all(['div', 'span', 'p']):
