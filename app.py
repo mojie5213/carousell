@@ -163,7 +163,7 @@ with tab_detect:
             
             for item in s_list:
                 profile_url = f"https://www.carousell.com.hk/u/{item['用户名']}/"
-                st.markdown(f"✅ **[{item['用户名']}]({profile_url})** -> 正常存活 | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
+                st.markdown(f"✔ **[{item['用户名']}]({profile_url})** -> 正常存活 | 手机: {item['手机验证']} | 加入时间: {item['加入时间']}")
             for item in f_list:
                 st.error(f"{item['用户名']} -> {item['状态']}")
 
